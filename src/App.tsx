@@ -2,9 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 const MAX_NUMBER = 100_000
-const ROLL_COST = 50
 const SAVE_KEY = 'numeric-clicker-save-v1'
-const LUCK_BIAS_PER_LEVEL = 0.28
+const BASE_ROLL_COST = 25
+const LINEAR_ROLL_COST_GROWTH = 3
+const EXPONENTIAL_ROLL_COST_GROWTH = 1.25
+const MIN_ROLL_EXPONENT = 1.8
+const BASE_ROLL_EXPONENT = 5.5
+const ROLL_EXPONENT_REDUCTION_PER_LUCK = 0.45
 
 const COIN_MULTIPLIERS = [1, 2, 3, 5, 8, 12]
 const MULTI_ROLL_COUNTS = [1, 3, 7, 15]
@@ -14,11 +18,18 @@ const MULTI_ROLL_COSTS = [70, 220, 520]
 const AUTO_CLICK_COSTS = [120, 320, 760, 1500]
 
 type SortMode = 'lowest' | 'highest' | 'rarity' | 'recent'
+type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
+
+interface RollResult {
+  value: number
+  isNew: boolean
+}
 
 interface GameState {
   coins: number
   crystals: number
   totalRolls: number
+  rollCost: number
   ownedNumbers: number[]
   obtainedOrder: Record<string, number>
   orderCounter: number
@@ -26,6 +37,7 @@ interface GameState {
   luckLevel: number
   multiRollLevel: number
   autoClickLevel: number
+  lastRollResults: RollResult[]
 }
 
 const formatter = new Intl.NumberFormat('en-US')
@@ -44,10 +56,49 @@ function highestValue(values: number[]): number {
   return max
 }
 
+function calculateRollCost(totalRolls: number): number {
+  return Math.floor(
+    BASE_ROLL_COST +
+      totalRolls * LINEAR_ROLL_COST_GROWTH +
+      Math.pow(totalRolls, EXPONENTIAL_ROLL_COST_GROWTH),
+  )
+}
+
+function calculateRollBatchCost(totalRolls: number, rollCount: number): number {
+  let total = 0
+  for (let i = 0; i < rollCount; i += 1) {
+    total += calculateRollCost(totalRolls + i)
+  }
+  return total
+}
+
+function rollExponent(luckLevel: number): number {
+  return Math.max(MIN_ROLL_EXPONENT, BASE_ROLL_EXPONENT - luckLevel * ROLL_EXPONENT_REDUCTION_PER_LUCK)
+}
+
 function rollWithLuck(luckLevel: number): number {
-  const bias = 1 + luckLevel * LUCK_BIAS_PER_LEVEL
-  const weighted = 1 - (1 - Math.random()) ** bias
-  return Math.floor(weighted * MAX_NUMBER) + 1
+  const exponent = rollExponent(luckLevel)
+  const r = Math.random()
+  const value = Math.floor(1 + MAX_NUMBER * Math.pow(r, exponent))
+  return Math.max(1, Math.min(MAX_NUMBER, value))
+}
+
+function getRarity(value: number): Rarity {
+  if (value <= 100) return 'common'
+  if (value <= 1_000) return 'uncommon'
+  if (value <= 10_000) return 'rare'
+  if (value <= 50_000) return 'epic'
+  return 'legendary'
+}
+
+function rarityLabel(rarity: Rarity): string {
+  return rarity.charAt(0).toUpperCase() + rarity.slice(1)
+}
+
+function formatRollResultMessage(result: RollResult): string {
+  return result.isNew
+    ? `New #${formatValue(result.value)} unlocked!`
+    : `Duplicate #${formatValue(result.value)} → +${formatValue(result.value)} crystals`
 }
 
 function clampLevel(level: number, maxLevel: number): number {
@@ -59,6 +110,7 @@ function initialState(): GameState {
     coins: 0,
     crystals: 0,
     totalRolls: 0,
+    rollCost: calculateRollCost(0),
     ownedNumbers: [1],
     obtainedOrder: { '1': 1 },
     orderCounter: 1,
@@ -66,6 +118,7 @@ function initialState(): GameState {
     luckLevel: 0,
     multiRollLevel: 0,
     autoClickLevel: 0,
+    lastRollResults: [],
   }
 }
 
@@ -112,10 +165,32 @@ function loadState(): GameState {
       }
     }
 
+    const safeTotalRolls = Math.max(0, Math.floor(Number(parsed.totalRolls) || 0))
+    const parsedRollCost = Math.floor(Number(parsed.rollCost))
+    const safeRollCost =
+      Number.isFinite(parsedRollCost) && parsedRollCost > 0
+        ? parsedRollCost
+        : calculateRollCost(safeTotalRolls)
+    const safeLastRollResults = Array.isArray(parsed.lastRollResults)
+      ? parsed.lastRollResults
+          .filter(
+            (result): result is RollResult =>
+              !!result &&
+              typeof result === 'object' &&
+              Number.isFinite(Number(result.value)) &&
+              typeof result.isNew === 'boolean',
+          )
+          .map((result) => ({
+            value: Math.max(1, Math.min(MAX_NUMBER, Math.floor(Number(result.value)))),
+            isNew: result.isNew,
+          }))
+      : []
+
     return {
       coins: Math.max(0, Math.floor(Number(parsed.coins) || 0)),
       crystals: Math.max(0, Math.floor(Number(parsed.crystals) || 0)),
-      totalRolls: Math.max(0, Math.floor(Number(parsed.totalRolls) || 0)),
+      totalRolls: safeTotalRolls,
+      rollCost: safeRollCost,
       ownedNumbers: owned,
       obtainedOrder,
       orderCounter: Math.max(
@@ -138,6 +213,7 @@ function loadState(): GameState {
         Math.floor(Number(parsed.autoClickLevel) || 0),
         AUTO_CLICK_COSTS.length,
       ),
+      lastRollResults: safeLastRollResults,
     }
   } catch {
     return fallback
@@ -177,6 +253,9 @@ function App() {
   }, [game.autoClickLevel])
 
   const rollCount = MULTI_ROLL_COUNTS[game.multiRollLevel] ?? 1
+  const baseRollCostTotal = game.rollCost * rollCount
+  const actualRollBatchCost = calculateRollBatchCost(game.totalRolls, rollCount)
+  const rollBias = rollExponent(game.luckLevel)
   const coinMultiplier = COIN_MULTIPLIERS[game.coinMultiplierLevel] ?? 1
   const highestOwned = useMemo(
     () => highestValue(game.ownedNumbers),
@@ -216,7 +295,7 @@ function App() {
   const rollNumbers = () => {
     setGame((previous) => {
       const activeRollCount = MULTI_ROLL_COUNTS[previous.multiRollLevel] ?? 1
-      const totalCost = ROLL_COST * activeRollCount
+      const totalCost = calculateRollBatchCost(previous.totalRolls, activeRollCount)
       if (previous.coins < totalCost) return previous
 
       const nextCoins = previous.coins - totalCost
@@ -226,6 +305,7 @@ function App() {
       const ownedSet = new Set(previous.ownedNumbers)
       const nextOwned = [...previous.ownedNumbers]
       const nextOrder = { ...previous.obtainedOrder }
+      const rollResults: RollResult[] = []
 
       for (let i = 0; i < activeRollCount; i += 1) {
         const rolled = rollWithLuck(previous.luckLevel)
@@ -233,11 +313,13 @@ function App() {
 
         if (ownedSet.has(rolled)) {
           nextCrystals += rolled
+          rollResults.push({ value: rolled, isNew: false })
         } else {
           ownedSet.add(rolled)
           nextOwned.push(rolled)
           nextOrderCounter += 1
           nextOrder[String(rolled)] = nextOrderCounter
+          rollResults.push({ value: rolled, isNew: true })
         }
       }
 
@@ -246,9 +328,11 @@ function App() {
         coins: nextCoins,
         crystals: nextCrystals,
         totalRolls: nextTotalRolls,
+        rollCost: calculateRollCost(nextTotalRolls),
         ownedNumbers: nextOwned,
         obtainedOrder: nextOrder,
         orderCounter: nextOrderCounter,
+        lastRollResults: rollResults,
       }
     })
   }
@@ -359,16 +443,29 @@ function App() {
       <section className="card controls">
         <div className="control-copy">
           <h2>Roll Numbers</h2>
+          <p>Cost for next single roll: {formatValue(game.rollCost)} coins.</p>
           <p>
-            Spend {formatValue(ROLL_COST * rollCount)} coins for {rollCount}{' '}
+            {rollCount === 1 ? 'Total cost' : 'Simple multiply preview'}:{' '}
+            {formatValue(baseRollCostTotal)} coins for {rollCount}{' '}
             {rollCount === 1 ? 'roll' : 'rolls'}.
+          </p>
+          {rollCount > 1 && (
+            <p className="roll-meta">
+              Actual total cost (scales per roll): {formatValue(actualRollBatchCost)} coins.
+            </p>
+          )}
+          <p className="roll-meta">
+            Luck Level: {game.luckLevel} · Roll Exponent: {rollBias.toFixed(2)}
+          </p>
+          <p className="roll-meta">
+            Higher numbers are rarer. Luck upgrades reduce low-number bias.
           </p>
         </div>
         <div className="control-actions">
           <button
             type="button"
             onClick={rollNumbers}
-            disabled={game.coins < ROLL_COST * rollCount}
+            disabled={game.coins < actualRollBatchCost}
           >
             Roll
           </button>
@@ -376,6 +473,46 @@ function App() {
             {resetArmed ? 'Click Again to Confirm Reset' : 'Reset Save'}
           </button>
         </div>
+      </section>
+
+      <section className="card roll-results">
+        <h2>Last Roll Results</h2>
+        {game.lastRollResults.length === 0 && (
+          <p className="empty-state">Roll to see new unlocks and duplicates here.</p>
+        )}
+
+        {game.lastRollResults.length === 1 &&
+          game.lastRollResults.map((result) => {
+            const rarity = getRarity(result.value)
+            return (
+              <p
+                key={`${result.value}-${result.isNew ? 'new' : 'dup'}`}
+                className={`roll-result-line rarity-${rarity} ${
+                  rarity === 'legendary' ? 'legendary-result' : ''
+                }`}
+              >
+                {formatRollResultMessage(result)}
+              </p>
+            )
+          })}
+
+        {game.lastRollResults.length > 1 && (
+          <div className="roll-result-list">
+            {game.lastRollResults.map((result, index) => {
+              const rarity = getRarity(result.value)
+              return (
+                <p
+                  key={`${index}-${result.value}-${result.isNew ? 'new' : 'dup'}`}
+                  className={`roll-result-chip rarity-${rarity} ${
+                    rarity === 'legendary' ? 'legendary-result' : ''
+                  }`}
+                >
+                  {formatRollResultMessage(result)}
+                </p>
+              )
+            })}
+          </div>
+        )}
       </section>
 
       <section className="card">
@@ -465,17 +602,21 @@ function App() {
         </div>
 
         <div className="inventory-grid">
-          {filteredAndSortedNumbers.map((value) => (
-            <button
-              key={value}
-              type="button"
-              className="number-tile"
-              onClick={() => clickNumber(value)}
-            >
-              <span>#{formatValue(value)}</span>
-              <small>+{formatValue(value * coinMultiplier)} coins</small>
-            </button>
-          ))}
+          {filteredAndSortedNumbers.map((value) => {
+            const rarity = getRarity(value)
+            return (
+              <button
+                key={value}
+                type="button"
+                className={`number-tile rarity-${rarity}`}
+                onClick={() => clickNumber(value)}
+              >
+                <span>#{formatValue(value)}</span>
+                <small className="rarity-label">{rarityLabel(rarity)}</small>
+                <small>+{formatValue(value * coinMultiplier)} coins</small>
+              </button>
+            )
+          })}
           {filteredAndSortedNumbers.length === 0 && (
             <p className="empty-state">No owned numbers match this search.</p>
           )}
