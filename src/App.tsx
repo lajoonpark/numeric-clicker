@@ -250,8 +250,8 @@ function App() {
   }, [game.autoClickLevel])
 
   const rollCount = MULTI_ROLL_COUNTS[game.multiRollLevel] ?? 1
-  const currentButtonCost = game.rollCost * rollCount
-  const rollTotalCost = calculateRollBatchCost(game.totalRolls, rollCount)
+  const baseRollCostTotal = game.rollCost * rollCount
+  const actualRollBatchCost = calculateRollBatchCost(game.totalRolls, rollCount)
   const rollBias = rollExponent(game.luckLevel)
   const coinMultiplier = COIN_MULTIPLIERS[game.coinMultiplierLevel] ?? 1
   const highestOwned = useMemo(
@@ -442,11 +442,13 @@ function App() {
           <h2>Roll Numbers</h2>
           <p>Current roll cost: {formatValue(game.rollCost)} coins.</p>
           <p>
-            Button total: {formatValue(currentButtonCost)} coins for {rollCount}{' '}
+            Base total (current cost × rolls): {formatValue(baseRollCostTotal)} coins for {rollCount}{' '}
             {rollCount === 1 ? 'roll' : 'rolls'}.
           </p>
           {rollCount > 1 && (
-            <p className="roll-meta">Scaled total charged this press: {formatValue(rollTotalCost)} coins.</p>
+            <p className="roll-meta">
+              Actual total cost (scales per roll): {formatValue(actualRollBatchCost)} coins.
+            </p>
           )}
           <p className="roll-meta">
             Luck Level: {game.luckLevel} · Roll Bias: {rollBias.toFixed(2)}
@@ -459,7 +461,7 @@ function App() {
           <button
             type="button"
             onClick={rollNumbers}
-            disabled={game.coins < rollTotalCost}
+            disabled={game.coins < actualRollBatchCost}
           >
             Roll
           </button>
