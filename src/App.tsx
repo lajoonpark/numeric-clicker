@@ -4,6 +4,7 @@ import './App.css'
 const MAX_NUMBER = 100_000
 const ROLL_COST = 50
 const SAVE_KEY = 'numeric-clicker-save-v1'
+const LUCK_BIAS_PER_LEVEL = 0.28
 
 const COIN_MULTIPLIERS = [1, 2, 3, 5, 8, 12]
 const MULTI_ROLL_COUNTS = [1, 3, 7, 15]
@@ -44,7 +45,7 @@ function highestValue(values: number[]): number {
 }
 
 function rollWithLuck(luckLevel: number): number {
-  const bias = 1 + luckLevel * 0.28
+  const bias = 1 + luckLevel * LUCK_BIAS_PER_LEVEL
   const weighted = 1 - (1 - Math.random()) ** bias
   return Math.floor(weighted * MAX_NUMBER) + 1
 }
@@ -147,10 +148,17 @@ function App() {
   const [game, setGame] = useState<GameState>(() => loadState())
   const [sortMode, setSortMode] = useState<SortMode>('lowest')
   const [search, setSearch] = useState('')
+  const [resetArmed, setResetArmed] = useState(false)
 
   useEffect(() => {
     localStorage.setItem(SAVE_KEY, JSON.stringify(game))
   }, [game])
+
+  useEffect(() => {
+    if (!resetArmed) return
+    const timeout = window.setTimeout(() => setResetArmed(false), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [resetArmed])
 
   useEffect(() => {
     if (game.autoClickLevel === 0) return
@@ -298,10 +306,14 @@ function App() {
   }
 
   const resetSave = () => {
-    if (!window.confirm('Reset your save file? This cannot be undone.')) return
+    if (!resetArmed) {
+      setResetArmed(true)
+      return
+    }
     const reset = initialState()
     localStorage.setItem(SAVE_KEY, JSON.stringify(reset))
     setGame(reset)
+    setResetArmed(false)
   }
 
   const nextCoinMultiplierCost =
@@ -361,7 +373,7 @@ function App() {
             Roll
           </button>
           <button type="button" className="danger" onClick={resetSave}>
-            Reset Save
+            {resetArmed ? 'Click Again to Confirm Reset' : 'Reset Save'}
           </button>
         </div>
       </section>
