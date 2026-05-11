@@ -435,7 +435,7 @@ function App() {
           <h2>Roll Numbers</h2>
           <p>Current roll cost: {formatValue(game.rollCost)} coins.</p>
           <p>
-            Simple estimate (no scaling): {formatValue(baseRollCostTotal)} coins for {rollCount}{' '}
+            Estimate using current roll cost: {formatValue(baseRollCostTotal)} coins for {rollCount}{' '}
             {rollCount === 1 ? 'roll' : 'rolls'}.
           </p>
           {rollCount > 1 && (
@@ -444,7 +444,7 @@ function App() {
             </p>
           )}
           <p className="roll-meta">
-            Luck Level: {game.luckLevel} · Roll Bias: {rollBias.toFixed(2)}
+            Luck Level: {game.luckLevel} · Roll Exponent: {rollBias.toFixed(2)}
           </p>
           <p className="roll-meta">
             Higher numbers are rarer. Luck upgrades reduce low-number bias.
