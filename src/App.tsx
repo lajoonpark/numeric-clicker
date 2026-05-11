@@ -82,20 +82,13 @@ function getRarity(value: number): Rarity {
 }
 
 function rarityLabel(rarity: Rarity): string {
-  switch (rarity) {
-    case 'common':
-      return 'Common'
-    case 'uncommon':
-      return 'Uncommon'
-    case 'rare':
-      return 'Rare'
-    case 'epic':
-      return 'Epic'
-    case 'legendary':
-      return 'Legendary'
-    default:
-      return 'Common'
-  }
+  return rarity.charAt(0).toUpperCase() + rarity.slice(1)
+}
+
+function formatRollResultMessage(result: RollResult): string {
+  return result.isNew
+    ? `New #${formatValue(result.value)} unlocked!`
+    : `Duplicate #${formatValue(result.value)} → +${formatValue(result.value)} crystals`
 }
 
 function clampLevel(level: number, maxLevel: number): number {
@@ -442,7 +435,7 @@ function App() {
           <h2>Roll Numbers</h2>
           <p>Current roll cost: {formatValue(game.rollCost)} coins.</p>
           <p>
-            Base total (current cost × rolls): {formatValue(baseRollCostTotal)} coins for {rollCount}{' '}
+            Simple estimate (no scaling): {formatValue(baseRollCostTotal)} coins for {rollCount}{' '}
             {rollCount === 1 ? 'roll' : 'rolls'}.
           </p>
           {rollCount > 1 && (
@@ -487,9 +480,7 @@ function App() {
                   rarity === 'legendary' ? 'legendary-result' : ''
                 }`}
               >
-                {result.isNew
-                  ? `New #${formatValue(result.value)} unlocked!`
-                  : `Duplicate #${formatValue(result.value)} → +${formatValue(result.value)} crystals`}
+                {formatRollResultMessage(result)}
               </p>
             )
           })}
@@ -505,9 +496,7 @@ function App() {
                     rarity === 'legendary' ? 'legendary-result' : ''
                   }`}
                 >
-                  {result.isNew
-                    ? `New #${formatValue(result.value)} unlocked!`
-                    : `Duplicate #${formatValue(result.value)} → +${formatValue(result.value)} crystals`}
+                  {formatRollResultMessage(result)}
                 </p>
               )
             })}
