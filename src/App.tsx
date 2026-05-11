@@ -3,6 +3,12 @@ import './App.css'
 
 const MAX_NUMBER = 100_000
 const SAVE_KEY = 'numeric-clicker-save-v1'
+const BASE_ROLL_COST = 25
+const LINEAR_ROLL_COST_GROWTH = 3
+const EXPONENTIAL_ROLL_COST_GROWTH = 1.25
+const MIN_ROLL_EXPONENT = 1.8
+const BASE_ROLL_EXPONENT = 5.5
+const ROLL_EXPONENT_REDUCTION_PER_LUCK = 0.45
 
 const COIN_MULTIPLIERS = [1, 2, 3, 5, 8, 12]
 const MULTI_ROLL_COUNTS = [1, 3, 7, 15]
@@ -51,7 +57,11 @@ function highestValue(values: number[]): number {
 }
 
 function calculateRollCost(totalRolls: number): number {
-  return Math.floor(25 + totalRolls * 3 + Math.pow(totalRolls, 1.25))
+  return Math.floor(
+    BASE_ROLL_COST +
+      totalRolls * LINEAR_ROLL_COST_GROWTH +
+      Math.pow(totalRolls, EXPONENTIAL_ROLL_COST_GROWTH),
+  )
 }
 
 function calculateRollBatchCost(totalRolls: number, rollCount: number): number {
@@ -63,7 +73,7 @@ function calculateRollBatchCost(totalRolls: number, rollCount: number): number {
 }
 
 function rollExponent(luckLevel: number): number {
-  return Math.max(1.8, 5.5 - luckLevel * 0.45)
+  return Math.max(MIN_ROLL_EXPONENT, BASE_ROLL_EXPONENT - luckLevel * ROLL_EXPONENT_REDUCTION_PER_LUCK)
 }
 
 function rollWithLuck(luckLevel: number): number {
@@ -433,10 +443,11 @@ function App() {
       <section className="card controls">
         <div className="control-copy">
           <h2>Roll Numbers</h2>
-          <p>Current roll cost: {formatValue(game.rollCost)} coins.</p>
+          <p>Cost for next single roll: {formatValue(game.rollCost)} coins.</p>
           <p>
-            {rollCount === 1 ? 'Total cost' : 'Current cost × rolls'}: {formatValue(baseRollCostTotal)} coins
-            for {rollCount} {rollCount === 1 ? 'roll' : 'rolls'}.
+            {rollCount === 1 ? 'Total cost' : 'Simple multiply preview'}:{' '}
+            {formatValue(baseRollCostTotal)} coins for {rollCount}{' '}
+            {rollCount === 1 ? 'roll' : 'rolls'}.
           </p>
           {rollCount > 1 && (
             <p className="roll-meta">
