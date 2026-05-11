@@ -435,8 +435,8 @@ function App() {
           <h2>Roll Numbers</h2>
           <p>Current roll cost: {formatValue(game.rollCost)} coins.</p>
           <p>
-            Estimate using current roll cost: {formatValue(baseRollCostTotal)} coins for {rollCount}{' '}
-            {rollCount === 1 ? 'roll' : 'rolls'}.
+            {rollCount === 1 ? 'Total cost' : 'Current cost × rolls'}: {formatValue(baseRollCostTotal)} coins
+            for {rollCount} {rollCount === 1 ? 'roll' : 'rolls'}.
           </p>
           {rollCount > 1 && (
             <p className="roll-meta">
