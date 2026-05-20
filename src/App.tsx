@@ -129,16 +129,16 @@ function rollWithLuck(luckLevel: number): number {
   const rareThreshold = uncommonThreshold + weights.rare
   const epicThreshold = rareThreshold + weights.epic
 
-  if (roll < weights.common) {
+  if (roll <= weights.common) {
     return randomIntInRange(1, 100)
   }
-  if (roll < uncommonThreshold) {
+  if (roll <= uncommonThreshold) {
     return randomIntInRange(101, 1_000)
   }
-  if (roll < rareThreshold) {
+  if (roll <= rareThreshold) {
     return randomIntInRange(1_001, 10_000)
   }
-  if (roll < epicThreshold) {
+  if (roll <= epicThreshold) {
     return randomIntInRange(10_001, 50_000)
   }
   return randomIntInRange(50_001, MAX_NUMBER)
