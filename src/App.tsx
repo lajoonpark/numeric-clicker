@@ -124,21 +124,24 @@ function getTierWeights(luckLevel: number): Record<Rarity, number> {
 
 function rollWithLuck(luckLevel: number): number {
   const weights = getTierWeights(luckLevel)
-  const roll = Math.random() * 100
-  const uncommonThreshold = weights.common + weights.uncommon
-  const rareThreshold = uncommonThreshold + weights.rare
-  const epicThreshold = rareThreshold + weights.epic
+  let roll = Math.random() * 100
 
-  if (roll <= weights.common) {
+  if (roll < weights.common) {
     return randomIntInRange(1, 100)
   }
-  if (roll <= uncommonThreshold) {
+  roll -= weights.common
+
+  if (roll < weights.uncommon) {
     return randomIntInRange(101, 1_000)
   }
-  if (roll <= rareThreshold) {
+  roll -= weights.uncommon
+
+  if (roll < weights.rare) {
     return randomIntInRange(1_001, 10_000)
   }
-  if (roll <= epicThreshold) {
+  roll -= weights.rare
+
+  if (roll < weights.epic) {
     return randomIntInRange(10_001, 50_000)
   }
   return randomIntInRange(50_001, MAX_NUMBER)
