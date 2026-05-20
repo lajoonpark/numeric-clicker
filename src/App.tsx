@@ -6,9 +6,6 @@ const SAVE_KEY = 'numeric-clicker-save-v1'
 const BASE_ROLL_COST = 25
 const LINEAR_ROLL_COST_GROWTH = 3
 const EXPONENTIAL_ROLL_COST_GROWTH = 1.25
-const MIN_ROLL_EXPONENT = 1.8
-const BASE_ROLL_EXPONENT = 5.5
-const ROLL_EXPONENT_REDUCTION_PER_LUCK = 0.45
 
 const COIN_MULTIPLIERS = [1, 2, 3, 5, 8, 12]
 const MULTI_ROLL_COUNTS = [1, 3, 7, 15]
@@ -72,15 +69,76 @@ function calculateRollBatchCost(totalRolls: number, rollCount: number): number {
   return total
 }
 
-function rollExponent(luckLevel: number): number {
-  return Math.max(MIN_ROLL_EXPONENT, BASE_ROLL_EXPONENT - luckLevel * ROLL_EXPONENT_REDUCTION_PER_LUCK)
+function randomIntInRange(min: number, max: number): number {
+  return Math.floor(min + Math.random() * (max - min + 1))
+}
+
+function getTierWeights(luckLevel: number): Record<Rarity, number> {
+  const maxLuckLevel = LUCK_COSTS.length
+  const clampedLuckLevel = Math.max(0, Math.min(luckLevel, maxLuckLevel))
+  const progress = maxLuckLevel === 0 ? 1 : clampedLuckLevel / maxLuckLevel
+
+  const startWeights: Record<Rarity, number> = {
+    common: 82,
+    uncommon: 15,
+    rare: 2.8,
+    epic: 0.19,
+    legendary: 0.01,
+  }
+  const endWeights: Record<Rarity, number> = {
+    common: 45,
+    uncommon: 30,
+    rare: 18,
+    epic: 6,
+    legendary: 1,
+  }
+
+  const interpolated: Record<Rarity, number> = {
+    common: startWeights.common + (endWeights.common - startWeights.common) * progress,
+    uncommon: startWeights.uncommon + (endWeights.uncommon - startWeights.uncommon) * progress,
+    rare: startWeights.rare + (endWeights.rare - startWeights.rare) * progress,
+    epic: startWeights.epic + (endWeights.epic - startWeights.epic) * progress,
+    legendary:
+      startWeights.legendary + (endWeights.legendary - startWeights.legendary) * progress,
+  }
+
+  const totalWeight = Object.values(interpolated).reduce((sum, weight) => sum + weight, 0)
+  if (totalWeight <= 0) {
+    return {
+      common: 100,
+      uncommon: 0,
+      rare: 0,
+      epic: 0,
+      legendary: 0,
+    }
+  }
+
+  return {
+    common: (interpolated.common / totalWeight) * 100,
+    uncommon: (interpolated.uncommon / totalWeight) * 100,
+    rare: (interpolated.rare / totalWeight) * 100,
+    epic: (interpolated.epic / totalWeight) * 100,
+    legendary: (interpolated.legendary / totalWeight) * 100,
+  }
 }
 
 function rollWithLuck(luckLevel: number): number {
-  const exponent = rollExponent(luckLevel)
-  const r = Math.random()
-  const value = Math.floor(1 + MAX_NUMBER * Math.pow(r, exponent))
-  return Math.max(1, Math.min(MAX_NUMBER, value))
+  const weights = getTierWeights(luckLevel)
+  const roll = Math.random() * 100
+
+  if (roll < weights.common) {
+    return randomIntInRange(1, 100)
+  }
+  if (roll < weights.common + weights.uncommon) {
+    return randomIntInRange(101, 1_000)
+  }
+  if (roll < weights.common + weights.uncommon + weights.rare) {
+    return randomIntInRange(1_001, 10_000)
+  }
+  if (roll < weights.common + weights.uncommon + weights.rare + weights.epic) {
+    return randomIntInRange(10_001, 50_000)
+  }
+  return randomIntInRange(50_001, MAX_NUMBER)
 }
 
 function getRarity(value: number): Rarity {
@@ -255,7 +313,7 @@ function App() {
   const rollCount = MULTI_ROLL_COUNTS[game.multiRollLevel] ?? 1
   const baseRollCostTotal = game.rollCost * rollCount
   const actualRollBatchCost = calculateRollBatchCost(game.totalRolls, rollCount)
-  const rollBias = rollExponent(game.luckLevel)
+  const tierWeights = useMemo(() => getTierWeights(game.luckLevel), [game.luckLevel])
   const coinMultiplier = COIN_MULTIPLIERS[game.coinMultiplierLevel] ?? 1
   const highestOwned = useMemo(
     () => highestValue(game.ownedNumbers),
@@ -455,10 +513,10 @@ function App() {
             </p>
           )}
           <p className="roll-meta">
-            Luck Level: {game.luckLevel} · Roll Exponent: {rollBias.toFixed(2)}
+            Luck Level: {game.luckLevel} · Legendary Chance: {tierWeights.legendary.toFixed(2)}%
           </p>
           <p className="roll-meta">
-            Higher numbers are rarer. Luck upgrades reduce low-number bias.
+            Higher-tier numbers are rarer. Luck upgrades shift tier odds but keep legendary special.
           </p>
         </div>
         <div className="control-actions">
